@@ -1,6 +1,6 @@
 {
   "name": "@youdowell/k8s-mysqldump",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Docker container to upload MySQL dump to S3",
   "private": true,
   "keywords": [
