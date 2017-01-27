@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysqldump-crontabs-vol
+  labels:
+    app: mysqldump
+data:
+  root: |
+    # min hour  day month weekday command
+    */5 * * * * mysql-backup.sh
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: mysqldump
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: mysqldump
+    spec:
+      terminationGracePeriodSeconds: 20
+      containers:
+        - name: mysqldump
+          image: youdowell/k8s-mysqldump:0.0.1
+          command: ["crond"]
+          args: ["-f", "-l", "2", "-c", "/etc/crontabs"]
+          env:
+            - name: DB_NAME
+              value: "*"
+            - name: DB_HOST
+              value: mysql
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef: {name: mysql-secrets, key: root-user }
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef: {name: mysql-secrets, key: root-password }
+            - name: S3_BACKUP_URI
+              value: "s3://my-bucket/backup/mysql"
+            - name: S3_ENDPOINT
+              value: "http://fakes3"
+            - name: AWS_ACCESS_KEY_ID
+              value: "my-aws-access-key"
+            - name: AWS_SECRET_ACCESS_KEY
+              value: "my-aws-secret-key"
+            - name: AWS_DEFAULT_REGION
+              value: "us-west-1"
+          volumeMounts:
+            - mountPath: /data/mysqldump
+              name: mysqldump
+            - mountPath: /etc/crontabs
+              name: crontabs
+              readOnly: true
+      volumes:
+        - name: mysqldump
+          hostPath:
+            path: /data/mysqldump
+        - name: crontabs
+          configMap:
+            name: mysqldump-crontabs-vol

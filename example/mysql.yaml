@@ -1,0 +1,169 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-config-vol
+  labels:
+    app: mysql
+data:
+  mariadb.cnf: |
+    [client]
+    default-character-set = utf8
+    [mysqld]
+    character-set-server  = utf8
+    collation-server      = utf8_general_ci
+  galera.cnf: |
+    [galera]
+    user = mysql
+    bind-address = 0.0.0.0
+    # Optimizations
+    innodb_flush_log_at_trx_commit = 0
+    sync_binlog = 0
+    expire_logs_days = 7
+    # Required settings
+    default_storage_engine = InnoDB
+    binlog_format = ROW
+    innodb_autoinc_lock_mode = 2
+    query_cache_size = 0
+    query_cache_type = 0
+    # MariaDB Galera settings
+    #wsrep_debug=ON
+    wsrep_on=ON
+    wsrep_provider=/usr/lib/galera/libgalera_smm.so
+    wsrep_sst_method=rsync
+    # Cluster settings (automatically updated)
+    wsrep_cluster_address=gcomm://
+    wsrep_cluster_name=galera
+    wsrep_node_address=127.0.0.1
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysql-secrets
+  labels:
+    app: mysql
+data:
+  # Root password: changeit
+  root-password: Y2hhbmdlaXQ=
+  # Root user: root
+  root-user: cm9vdA==
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+  name: mysql
+  labels:
+    app: mysql
+    tier: data
+spec:
+  ports:
+  - port: 3306
+    name: mysql
+  clusterIP: None
+  selector:
+    app: mysql
+---
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: mysql
+spec:
+  serviceName: "mysql"
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: mysql
+        tier: data
+      annotations:
+        pod.beta.kubernetes.io/init-containers: '[
+          {
+            "name": "galera-init",
+            "image": "youdowell/k8s-galera-init:0.1.0",
+            "args": ["-service=mysql"],
+            "env": [
+              {
+                "name": "POD_NAMESPACE",
+                "valueFrom": {
+                  "fieldRef": { "apiVersion": "v1", "fieldPath": "metadata.namespace" }
+                }
+              },
+              {
+                "name": "SAFE_TO_BOOTSTRAP",
+                "value": "1"
+              },
+              {
+                "name": "DEBUG",
+                "value": "1"
+              }
+            ],
+            "volumeMounts": [
+              {
+                "name": "config",
+                "mountPath": "/etc/mysql/conf.d"
+              },
+              {
+                "name": "data",
+                "mountPath": "/var/lib/mysql"
+              }
+            ]
+          }
+        ]'
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+      - name: mysql
+        image: mariadb:10.1
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3306
+          name: mysql
+        - containerPort: 4444
+          name: sst
+        - containerPort: 4567
+          name: replication
+        - containerPort: 4568
+          name: ist
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secrets
+              key: root-password
+        - name: MYSQL_ROOT_USER
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secrets
+              key: root-user
+        - name: MYSQL_INITDB_SKIP_TZINFO
+          value: "yes"
+        livenessProbe:
+          exec:
+            command: ["sh", "-c", "mysql -u\"${MYSQL_ROOT_USER:-root}\" -p\"${MYSQL_ROOT_PASSWORD}\" -e 'show databases;'"]
+          initialDelaySeconds: 60
+          timeoutSeconds: 5
+        readinessProbe:
+          exec:
+            command: ["sh", "-c", "mysql -u\"${MYSQL_ROOT_USER:-root}\" -p\"${MYSQL_ROOT_PASSWORD}\" -e 'show databases;'"]
+          initialDelaySeconds: 20
+          timeoutSeconds: 5
+        volumeMounts:
+        - name: config
+          mountPath: /etc/mysql/conf.d
+        - name: data
+          mountPath: /var/lib/mysql
+      volumes:
+      - name: config
+        configMap:
+          name: mysql-config-vol
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+      annotations:
+        volume.alpha.kubernetes.io/storage-class: default
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 10Gi

@@ -1,0 +1,55 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: fakes3
+  labels:
+    app: fakes3
+spec:
+  ports:
+  - port: 80
+    name: s3
+    targetPort: s3
+  #clusterIP: None
+  selector:
+    app: fakes3
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: fakes3-buckets
+  annotations:
+    volume.alpha.kubernetes.io/storage-class: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: fakes3
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: fakes3
+    spec:
+      containers:
+        - name: fakes3
+          image: andrewgaul/s3proxy
+          env:
+            - name: S3PROXY_AUTHORIZATION
+              value: none
+          ports:
+            - containerPort: 80
+              name: s3
+          volumeMounts:
+          - mountPath: /data
+            name: buckets
+      volumes:
+        - name: buckets
+          persistentVolumeClaim:
+            claimName: fakes3-buckets
