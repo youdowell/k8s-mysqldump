@@ -44,18 +44,18 @@ else
 	fi
 
 	if [ -n "$DB_SKIP" ]; then
-    	filtered_databases=" ${databases[*]} "
-        for dbname in ${DB_SKIP//,/ }; do
-    		log "Skipping '$dbname'"
-    		filtered_databases=${filtered_databases/ ${dbname} / }
-        done
-        databases=($filtered_databases)
+		filtered_databases=" ${databases[*]} "
+		for dbname in ${DB_SKIP//,/ }; do
+			log "Skipping '$dbname'"
+			filtered_databases=${filtered_databases/ ${dbname} / }
+		done
+		databases=($filtered_databases)
 	fi
 
 	for dbname in ${databases[@]}; do
-    	log "Creating dump for '${dbname}'..."
-    	dump="${BACKUP_DIR}/${dbname}.sql.gz"
-    	"${mysqldump[@]}" "${dbname}" | gzip > "$dump"
+		log "Creating dump for '${dbname}'..."
+		dump="${BACKUP_DIR}/${dbname}.sql.gz"
+		"${mysqldump[@]}" "${dbname}" | gzip > "$dump"
 	done
 fi
 
@@ -69,23 +69,23 @@ log "Done within $elapsed_time seconds. Total size: $total_size."
 if [ -n "$S3_BACKUP_URI" ]; then
 	latest_uri="$S3_BACKUP_URI/latest"
 	history_uri="$S3_BACKUP_URI/history/$tstamp"
-    bucket_name=$(echo $S3_BACKUP_URI | cut -d'/' -f3)
-    aws_cli=(aws)
+	bucket_name=$(echo $S3_BACKUP_URI | cut -d'/' -f3)
+	aws_cli=(aws)
 
 	# Use custom S3 endpoint if specified
 	[ -n "$S3_ENDPOINT" ] && aws_cli+=("--endpoint-url=$S3_ENDPOINT")
 
-    # Create S3 bucket if necessary
-    if ! "${aws_cli[@]}" s3api head-bucket --bucket "$bucket_name"; then
-        log "Creating new S3 bucket..."
-        "${aws_cli[@]}" s3api create-bucket --bucket "$bucket_name"
-    fi
+	# Create S3 bucket if necessary
+	if ! "${aws_cli[@]}" s3api head-bucket --bucket "$bucket_name"; then
+		log "Creating new S3 bucket..."
+		"${aws_cli[@]}" s3api create-bucket --bucket "$bucket_name"
+	fi
 
-    log "Uploading backup files to '$history_uri'..."
-    "${aws_cli[@]}" s3 sync "$BACKUP_DIR" "$history_uri" --delete --quiet
-    log "Updating '$latest_uri'..."
-    "${aws_cli[@]}" s3 sync "$history_uri" "$latest_uri" --delete --quiet
+	log "Uploading backup files to '$history_uri'..."
+	"${aws_cli[@]}" s3 sync "$BACKUP_DIR" "$history_uri" --delete --quiet
+	log "Updating '$latest_uri'..."
+	"${aws_cli[@]}" s3 sync "$history_uri" "$latest_uri" --delete --quiet
 
-    elapsed_time=$(($SECONDS - $start_time))
-    log "Uploaded within $elapsed_time seconds. Timestamp: $tstamp."
+	elapsed_time=$(($SECONDS - $start_time))
+	log "Uploaded within $elapsed_time seconds. Timestamp: $tstamp."
 fi

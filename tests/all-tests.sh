@@ -26,14 +26,14 @@ start() {
 stop() {
 	kubectl --namespace ${NAMESPACE} delete deployment -l "$label"
 
-    echo -n "Waiting until all pods are stopped ["
-    timeout=$((SECONDS + 120))
-    while [ $SECONDS -lt $timeout ]; do
-    	pods=$(kubectl --namespace ${NAMESPACE} get po -l "$label" --no-headers 2>/dev/null)
-    	[ -z "$pods" ] && echo "OK]" && break
-    	sleep 2
-    	echo -n "."
-    done
+	echo -n "Waiting until all pods are stopped ["
+	timeout=$((SECONDS + 120))
+	while [ $SECONDS -lt $timeout ]; do
+		pods=$(kubectl --namespace ${NAMESPACE} get po -l "$label" --no-headers 2>/dev/null)
+		[ -z "$pods" ] && echo "OK]" && break
+		sleep 2
+		echo -n "."
+	done
 }
 
 clean() {
@@ -129,7 +129,7 @@ wait_command() {
 	set +e
 	while [ $(date +%s) -lt $expire ]; do
 		if eval "$cmd"; then
-        	set -e
+	set -e
 			ENDTIME=$(date +%s)
 			echo "OK after $(($ENDTIME - $STARTTIME)) seconds]"
 			return 0
@@ -204,9 +204,9 @@ run_tests() {
 	echo "Running tests..."
 	for testname in "$@"; do
 		if ! [ ${testname:0:5} = "test_" ]; then
-    		echo "Invalid test name: $testname"
-    		exit 1
-    	fi
+			echo "Invalid test name: $testname"
+			exit 1
+		fi
 		before $testname
 		eval $testname
 		after $testname
